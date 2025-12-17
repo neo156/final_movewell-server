@@ -365,8 +365,8 @@ app.post('/api/progress/workout', verifyToken, async (req, res) => {
 // Record completed habit
 app.post('/api/progress/habit', verifyToken, async (req, res) => {
   try {
-    const { habitId, title, actual, goal } = req.body;
-    console.log('Received habit data:', { habitId, title, actual, goal });
+    const { habitId, title, actual } = req.body;
+    console.log('Received habit data:', { habitId, title, actual, body: req.body });
     
     if (!habitId || !title) {
       return res.status(400).json({ error: 'Habit details are required' });
@@ -375,18 +375,39 @@ app.post('/api/progress/habit', verifyToken, async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // Convert actual to number if it's a string
+    let actualValue = actual;
+    if (typeof actual === 'string') {
+      actualValue = parseFloat(actual);
+    }
+    
+    // Validate that Walking/Running habits have actual value
+    if (title.includes('Walking') || title.includes('Running')) {
+      if (actualValue === undefined || actualValue === null || isNaN(actualValue) || !isFinite(actualValue)) {
+        console.error('Walking/Running habit missing or invalid actual value:', { title, actual, actualValue });
+        return res.status(400).json({ error: 'Walking and Running habits require a valid distance value (km)' });
+      }
+      if (actualValue <= 0) {
+        return res.status(400).json({ error: 'Distance must be greater than 0' });
+      }
+      if (actualValue > 10000) {
+        return res.status(400).json({ error: 'Distance value is too large (max 10000 km)' });
+      }
+    }
+
     const habitData = {
       habitId: String(habitId),
       title: String(title),
       timestamp: new Date(),
     };
     
-    // Only add actual and goal if they have values
-    if (actual !== undefined && actual !== null) {
-      habitData.actual = Number(actual);
-    }
-    if (goal !== undefined && goal !== null) {
-      habitData.goal = Number(goal);
+    // Always add actual if provided (required for Walking/Running)
+    if (actualValue !== undefined && actualValue !== null && !isNaN(actualValue) && isFinite(actualValue)) {
+      habitData.actual = Number(actualValue);
+      console.log('Adding actual value:', habitData.actual, 'type:', typeof habitData.actual);
+    } else if (title.includes('Walking') || title.includes('Running')) {
+      console.error('Walking/Running habit has invalid actual value:', { actual, actualValue });
+      return res.status(400).json({ error: 'Invalid distance value for Walking/Running habit' });
     }
     
     console.log('Saving habit data:', habitData);
@@ -502,13 +523,14 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
 
     const streak = await Streak.findOne({ userId: req.userId });
 
-    // Calculate distance from Walking/Running habits
+    // Calculate total distance from ALL Walking/Running habits for TODAY only
     let totalDistance = 0;
-    if (todayProgress?.habitsCompleted) {
-      const walkingHabit = todayProgress.habitsCompleted.find(h => h.title?.includes('Walking'));
-      const runningHabit = todayProgress.habitsCompleted.find(h => h.title?.includes('Running'));
-      if (walkingHabit?.actual) totalDistance += walkingHabit.actual;
-      if (runningHabit?.actual) totalDistance += runningHabit.actual;
+    if (todayProgress?.habitsCompleted && Array.isArray(todayProgress.habitsCompleted)) {
+      todayProgress.habitsCompleted.forEach(habit => {
+        if ((habit.title?.includes('Walking') || habit.title?.includes('Running')) && habit.actual) {
+          totalDistance += Number(habit.actual) || 0;
+        }
+      });
     }
 
     // Get weekly data (last 7 days)
