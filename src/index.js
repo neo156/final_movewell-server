@@ -365,7 +365,9 @@ app.post('/api/progress/workout', verifyToken, async (req, res) => {
 // Record completed habit
 app.post('/api/progress/habit', verifyToken, async (req, res) => {
   try {
-    const { habitId, title } = req.body;
+    const { habitId, title, actual, goal } = req.body;
+    console.log('Received habit data:', { habitId, title, actual, goal });
+    
     if (!habitId || !title) {
       return res.status(400).json({ error: 'Habit details are required' });
     }
@@ -373,23 +375,38 @@ app.post('/api/progress/habit', verifyToken, async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const habitData = {
+      habitId: String(habitId),
+      title: String(title),
+      timestamp: new Date(),
+    };
+    
+    // Only add actual and goal if they have values
+    if (actual !== undefined && actual !== null) {
+      habitData.actual = Number(actual);
+    }
+    if (goal !== undefined && goal !== null) {
+      habitData.goal = Number(goal);
+    }
+    
+    console.log('Saving habit data:', habitData);
+
     const progress = await Progress.findOneAndUpdate(
       { userId: req.userId, date: today },
       {
         $push: {
-          habitsCompleted: {
-            habitId,
-            title,
-          },
+          habitsCompleted: habitData,
         },
       },
       { new: true, upsert: true }
     );
 
+    console.log('Saved progress habitsCompleted:', progress.habitsCompleted);
+
     // Update streak
     await updateStreak(req.userId);
 
-    res.json(progress);
+    res.json({ success: true, habit: habitData, progress });
   } catch (err) {
     console.error('Record habit error:', err);
     res.status(500).json({ error: 'Failed to record habit' });
@@ -485,15 +502,65 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
 
     const streak = await Streak.findOne({ userId: req.userId });
 
+    // Calculate distance from Walking/Running habits
+    let totalDistance = 0;
+    if (todayProgress?.habitsCompleted) {
+      const walkingHabit = todayProgress.habitsCompleted.find(h => h.title?.includes('Walking'));
+      const runningHabit = todayProgress.habitsCompleted.find(h => h.title?.includes('Running'));
+      if (walkingHabit?.actual) totalDistance += walkingHabit.actual;
+      if (runningHabit?.actual) totalDistance += runningHabit.actual;
+    }
+
+    // Get weekly data (last 7 days)
+    const weekStart = new Date(today);
+    const dayOfWeek = today.getDay();
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    weekStart.setDate(today.getDate() - daysToMonday);
+    
+    const weeklyProgress = await Progress.find({
+      userId: req.userId,
+      date: { $gte: weekStart, $lte: today },
+    });
+
+    const weeklyData = {};
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    
+    days.forEach((day, index) => {
+      const dayDate = new Date(weekStart);
+      dayDate.setDate(weekStart.getDate() + index);
+      dayDate.setHours(0, 0, 0, 0);
+      
+      const dayProgress = weeklyProgress.find(p => 
+        p.date.getTime() === dayDate.getTime()
+      );
+      
+      let dayDistance = 0;
+      if (dayProgress?.habitsCompleted) {
+        const walking = dayProgress.habitsCompleted.find(h => h.title?.includes('Walking'));
+        const running = dayProgress.habitsCompleted.find(h => h.title?.includes('Running'));
+        if (walking?.actual) dayDistance += walking.actual;
+        if (running?.actual) dayDistance += running.actual;
+      }
+      
+      weeklyData[day] = {
+        workouts: dayProgress?.workoutsCompleted?.length || 0,
+        habits: dayProgress?.habitsCompleted?.length || 0,
+        minutes: dayProgress?.minutesExercised || 0,
+        calories: dayProgress?.caloriesBurned || 0,
+        km: dayDistance,
+      };
+    });
+
     const stats = {
       today: {
-        steps: todayProgress?.steps || 0,
+        distance: totalDistance,
         minutesExercised: todayProgress?.minutesExercised || 0,
         caloriesBurned: todayProgress?.caloriesBurned || 0,
         workoutsCompleted: todayProgress?.workoutsCompleted?.length || 0,
         habitsCompleted: todayProgress?.habitsCompleted?.length || 0,
         stretchesCompleted: todayProgress?.stretchesCompleted?.length || 0,
         warmupsCompleted: todayProgress?.warmupsCompleted?.length || 0,
+        habits: todayProgress?.habitsCompleted || [],
       },
       streak: {
         current: streak?.currentStreak || 0,
@@ -501,6 +568,7 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
         totalWorkouts: streak?.totalWorkoutsCompleted || 0,
         totalHabits: streak?.totalHabitsCompleted || 0,
       },
+      weekly: weeklyData,
     };
 
     res.json(stats);
