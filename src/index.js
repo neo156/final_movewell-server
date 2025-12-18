@@ -327,14 +327,22 @@ app.post('/api/progress/steps', verifyToken, async (req, res) => {
 // Record completed workout
 app.post('/api/progress/workout', verifyToken, async (req, res) => {
   try {
-    const { workoutId, title, duration, caloriesBurned } = req.body;
+    const { workoutId, title, duration, caloriesBurned, date } = req.body;
     if (!workoutId || !title || !duration) {
       return res.status(400).json({ error: 'Workout details are required' });
     }
 
-    // Use local date to match user's timezone - create date at midnight local time
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Use date from client (user's local date) or fall back to server's local date
+    let today;
+    if (date && typeof date === 'string') {
+      // Parse YYYY-MM-DD format from client and create UTC date to ensure correct date storage
+      const [year, month, day] = date.split('-').map(Number);
+      today = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    } else {
+      // Fallback to server's local date
+      today = new Date();
+      today.setHours(0, 0, 0, 0);
+    }
 
     // Check if this workoutId already exists to prevent duplicates
     const existingProgressToday = await Progress.findOne({
@@ -518,14 +526,22 @@ app.post('/api/progress/habit', verifyToken, async (req, res) => {
 // Record completed stretch
 app.post('/api/progress/stretch', verifyToken, async (req, res) => {
   try {
-    const { stretchId, title, duration } = req.body;
+    const { stretchId, title, duration, date } = req.body;
     if (!stretchId || !title || !duration) {
       return res.status(400).json({ error: 'Stretch details are required' });
     }
 
-    // Use local date to match user's timezone - create date at midnight local time
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Use date from client (user's local date) or fall back to server's local date
+    let today;
+    if (date && typeof date === 'string') {
+      // Parse YYYY-MM-DD format from client and create UTC date to ensure correct date storage
+      const [year, month, day] = date.split('-').map(Number);
+      today = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    } else {
+      // Fallback to server's local date
+      today = new Date();
+      today.setHours(0, 0, 0, 0);
+    }
 
     // Check if this stretchId already exists in today OR yesterday to prevent duplicates
     const existingProgressToday = await Progress.findOne({
@@ -583,14 +599,22 @@ app.post('/api/progress/stretch', verifyToken, async (req, res) => {
 // Record completed warmup
 app.post('/api/progress/warmup', verifyToken, async (req, res) => {
   try {
-    const { warmupId, title, duration, caloriesBurned } = req.body;
+    const { warmupId, title, duration, caloriesBurned, date } = req.body;
     if (!warmupId || !title || !duration) {
       return res.status(400).json({ error: 'Warmup details are required' });
     }
 
-    // Use local date to match user's timezone - create date at midnight local time
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Use date from client (user's local date) or fall back to server's local date
+    let today;
+    if (date && typeof date === 'string') {
+      // Parse YYYY-MM-DD format from client and create UTC date to ensure correct date storage
+      const [year, month, day] = date.split('-').map(Number);
+      today = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    } else {
+      // Fallback to server's local date
+      today = new Date();
+      today.setHours(0, 0, 0, 0);
+    }
 
     // Check if this warmupId already exists in today OR yesterday to prevent duplicates
     const existingProgressToday = await Progress.findOne({
