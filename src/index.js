@@ -420,12 +420,29 @@ app.post('/api/progress/habit', verifyToken, async (req, res) => {
     console.log('📝 actual field exists?', 'actual' in habitToSave);
     console.log('📝 actual value:', habitToSave.actual, 'type:', typeof habitToSave.actual);
 
-    // Use $push to add the habit with actual value
+    // Build the final habit object to push - ensure actual is included
+    const habitToPush = {
+      habitId: String(habitId),
+      title: String(title),
+      timestamp: new Date(),
+    };
+    
+    // CRITICAL: For Walking/Running, actual MUST be included (already validated)
+    if (title.includes('Walking') || title.includes('Running')) {
+      habitToPush.actual = Number(actualValue);
+      console.log('🔧🔧🔧 Walking/Running - actual added to habitToPush:', habitToPush.actual);
+    } else if (actualValue !== undefined && actualValue !== null && !isNaN(actualValue) && isFinite(actualValue)) {
+      habitToPush.actual = Number(actualValue);
+    }
+    
+    console.log('🔧🔧🔧 FINAL habitToPush object:', JSON.stringify(habitToPush, null, 2));
+    console.log('🔧🔧🔧 habitToPush.actual:', habitToPush.actual, 'type:', typeof habitToPush.actual);
+    
     const progress = await Progress.findOneAndUpdate(
       { userId: req.userId, date: today },
       {
         $push: {
-          habitsCompleted: habitToSave,
+          habitsCompleted: habitToPush,
         },
       },
       { new: true, upsert: true, runValidators: false }

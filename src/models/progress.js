@@ -18,8 +18,9 @@ const progressSchema = new mongoose.Schema(
     ],
     habitsCompleted: [
       {
-        habitId: String,
-        title: String,
+        habitId: { type: String, required: true },
+        title: { type: String, required: true },
+        actual: { type: Number }, // Actual value for numeric habits (e.g., 5 km for Walking)
         timestamp: { type: Date, default: Date.now },
       }
     ],
@@ -31,8 +32,19 @@ const progressSchema = new mongoose.Schema(
         timestamp: { type: Date, default: Date.now },
       }
     ],
+    warmupsCompleted: [
+      {
+        warmupId: String,
+        title: String,
+        duration: Number,
+        timestamp: { type: Date, default: Date.now },
+      }
+    ],
   },
-  { timestamps: true }
+  { 
+    timestamps: true,
+    strict: false // Allow fields not in schema to be saved
+  }
 );
 
 // Index for efficient querying
