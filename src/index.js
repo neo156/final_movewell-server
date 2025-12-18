@@ -405,16 +405,24 @@ app.post('/api/progress/workout', verifyToken, async (req, res) => {
 // Record completed habit
 app.post('/api/progress/habit', verifyToken, async (req, res) => {
   try {
-    const { habitId, title, actual } = req.body;
+    const { habitId, title, actual, date } = req.body;
     console.log('Received habit data:', { habitId, title, actual, body: req.body });
     
     if (!habitId || !title) {
       return res.status(400).json({ error: 'Habit details are required' });
     }
 
-    // Use local date to match user's timezone - create date at midnight local time
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Use date from client (user's local date) or fall back to server's local date
+    let today;
+    if (date && typeof date === 'string') {
+      // Parse YYYY-MM-DD format from client and create UTC date to ensure correct date storage
+      const [year, month, day] = date.split('-').map(Number);
+      today = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    } else {
+      // Fallback to server's local date
+      today = new Date();
+      today.setHours(0, 0, 0, 0);
+    }
 
     // Convert actual to number if it's a string
     let actualValue = actual;
