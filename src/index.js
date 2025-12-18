@@ -253,18 +253,20 @@ app.put('/api/user/change-password', verifyToken, async (req, res) => {
 // Get today's progress
 app.get('/api/progress/today', verifyToken, async (req, res) => {
   try {
+    // Use UTC to avoid timezone issues
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    todayUTC.setUTCHours(0, 0, 0, 0);
     
     let progress = await Progress.findOne({
       userId: req.userId,
-      date: today,
+      date: todayUTC,
     });
 
     if (!progress) {
       progress = await Progress.create({
         userId: req.userId,
-        date: today,
+        date: todayUTC,
       });
     }
 
@@ -306,11 +308,13 @@ app.post('/api/progress/steps', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Valid steps count is required' });
     }
 
+    // Use UTC to avoid timezone issues
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    todayUTC.setUTCHours(0, 0, 0, 0);
 
     const progress = await Progress.findOneAndUpdate(
-      { userId: req.userId, date: today },
+      { userId: req.userId, date: todayUTC },
       { $inc: { steps } },
       { new: true, upsert: true }
     );
@@ -330,11 +334,13 @@ app.post('/api/progress/workout', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Workout details are required' });
     }
 
+    // Use UTC to avoid timezone issues
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    todayUTC.setUTCHours(0, 0, 0, 0);
 
     const progress = await Progress.findOneAndUpdate(
-      { userId: req.userId, date: today },
+      { userId: req.userId, date: todayUTC },
       {
         $push: {
           workoutsCompleted: {
@@ -372,8 +378,10 @@ app.post('/api/progress/habit', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Habit details are required' });
     }
 
+    // Use UTC to avoid timezone issues
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    todayUTC.setUTCHours(0, 0, 0, 0);
 
     // Convert actual to number if it's a string
     let actualValue = actual;
@@ -439,7 +447,7 @@ app.post('/api/progress/habit', verifyToken, async (req, res) => {
     console.log('🔧🔧🔧 habitToPush.actual:', habitToPush.actual, 'type:', typeof habitToPush.actual);
     
     const progress = await Progress.findOneAndUpdate(
-      { userId: req.userId, date: today },
+      { userId: req.userId, date: todayUTC },
       {
         $push: {
           habitsCompleted: habitToPush,
@@ -493,11 +501,39 @@ app.post('/api/progress/stretch', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Stretch details are required' });
     }
 
+    // Use UTC to avoid timezone issues (consistent with warmup endpoint)
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    todayUTC.setUTCHours(0, 0, 0, 0);
+
+    // Check if this stretchId already exists in today OR yesterday to prevent duplicates
+    const existingProgressToday = await Progress.findOne({
+      userId: req.userId,
+      date: todayUTC,
+      'stretchesCompleted.stretchId': stretchId,
+    });
+
+    if (existingProgressToday) {
+      // Stretch already exists today, return existing progress without duplicating
+      return res.json(existingProgressToday);
+    }
+
+    // Also check yesterday to prevent cross-day duplicates
+    const yesterdayUTC = new Date(todayUTC);
+    yesterdayUTC.setUTCDate(yesterdayUTC.getUTCDate() - 1);
+    const existingProgressYesterday = await Progress.findOne({
+      userId: req.userId,
+      date: yesterdayUTC,
+      'stretchesCompleted.stretchId': stretchId,
+    });
+
+    if (existingProgressYesterday) {
+      // Stretch already exists yesterday, return existing progress without duplicating
+      return res.json(existingProgressYesterday);
+    }
 
     const progress = await Progress.findOneAndUpdate(
-      { userId: req.userId, date: today },
+      { userId: req.userId, date: todayUTC },
       {
         $push: {
           stretchesCompleted: {
@@ -531,11 +567,39 @@ app.post('/api/progress/warmup', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Warmup details are required' });
     }
 
+    // Use UTC to avoid timezone issues
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    todayUTC.setUTCHours(0, 0, 0, 0);
+
+    // Check if this warmupId already exists in today OR yesterday to prevent duplicates
+    const existingProgressToday = await Progress.findOne({
+      userId: req.userId,
+      date: todayUTC,
+      'warmupsCompleted.warmupId': warmupId,
+    });
+
+    if (existingProgressToday) {
+      // Warmup already exists today, return existing progress without duplicating
+      return res.json(existingProgressToday);
+    }
+
+    // Also check yesterday to prevent cross-day duplicates
+    const yesterdayUTC = new Date(todayUTC);
+    yesterdayUTC.setUTCDate(yesterdayUTC.getUTCDate() - 1);
+    const existingProgressYesterday = await Progress.findOne({
+      userId: req.userId,
+      date: yesterdayUTC,
+      'warmupsCompleted.warmupId': warmupId,
+    });
+
+    if (existingProgressYesterday) {
+      // Warmup already exists yesterday, return existing progress without duplicating
+      return res.json(existingProgressYesterday);
+    }
 
     const progress = await Progress.findOneAndUpdate(
-      { userId: req.userId, date: today },
+      { userId: req.userId, date: todayUTC },
       {
         $push: {
           warmupsCompleted: {
@@ -566,12 +630,14 @@ app.post('/api/progress/warmup', verifyToken, async (req, res) => {
 // Get stats (summary)
 app.get('/api/progress/stats', verifyToken, async (req, res) => {
   try {
+    // Use UTC to avoid timezone issues
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    todayUTC.setUTCHours(0, 0, 0, 0);
 
     const todayProgress = await Progress.findOne({
       userId: req.userId,
-      date: today,
+      date: todayUTC,
     });
 
     const streak = await Streak.findOne({ userId: req.userId });
@@ -586,40 +652,38 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
       });
     }
 
-    // Get weekly data (last 7 days)
-    const weekStart = new Date(today);
-    const dayOfWeek = today.getDay();
+    // Get weekly data (last 7 days) - use UTC
+    const weekStartUTC = new Date(todayUTC);
+    const dayOfWeek = todayUTC.getUTCDay();
     const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    weekStart.setDate(today.getDate() - daysToMonday);
+    weekStartUTC.setUTCDate(todayUTC.getUTCDate() - daysToMonday);
+    weekStartUTC.setUTCHours(0, 0, 0, 0);
     
     const weeklyProgress = await Progress.find({
       userId: req.userId,
-      date: { $gte: weekStart, $lte: today },
+      date: { $gte: weekStartUTC, $lte: todayUTC },
     });
 
     const weeklyData = {};
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     
     days.forEach((day, index) => {
-      const dayDate = new Date(weekStart);
-      dayDate.setDate(weekStart.getDate() + index);
-      dayDate.setHours(0, 0, 0, 0);
+      const dayDate = new Date(weekStartUTC);
+      dayDate.setUTCDate(weekStartUTC.getUTCDate() + index);
+      dayDate.setUTCHours(0, 0, 0, 0);
       
-      // Normalize dayDate to UTC for comparison
-      const dayDateStr = dayDate.toISOString().split('T')[0]; // YYYY-MM-DD
-      
-      // Find progress for this specific day - compare dates properly using date strings
+      // Find progress for this specific day - compare dates properly using UTC
       const dayProgress = weeklyProgress.find(p => {
         const pDate = new Date(p.date);
-        // Normalize to UTC date string for reliable comparison
-        const pDateStr = pDate.toISOString().split('T')[0]; // YYYY-MM-DD
-        return pDateStr === dayDateStr;
+        // Normalize to UTC for comparison
+        const pDateUTC = new Date(Date.UTC(pDate.getUTCFullYear(), pDate.getUTCMonth(), pDate.getUTCDate()));
+        pDateUTC.setUTCHours(0, 0, 0, 0);
+        return pDateUTC.getTime() === dayDate.getTime();
       });
       
       // DEBUG: Log what we found for this day
       if (dayProgress) {
-        const progressDateStr = new Date(dayProgress.date).toISOString().split('T')[0];
-        console.log(`📅 ${day} (${dayDateStr}): Found progress record (stored date: ${progressDateStr})`);
+        console.log(`📅 ${day} (${dayDate.toISOString().split('T')[0]}): Found progress record`);
         console.log(`   - workoutsCompleted: ${dayProgress.workoutsCompleted?.length || 0} items`);
         if (dayProgress.workoutsCompleted && dayProgress.workoutsCompleted.length > 0) {
           console.log(`   - Workout details:`, dayProgress.workoutsCompleted.map(w => ({ title: w.title, workoutId: w.workoutId })));
@@ -627,12 +691,7 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
         console.log(`   - warmupsCompleted: ${dayProgress.warmupsCompleted?.length || 0} items`);
         console.log(`   - stretchesCompleted: ${dayProgress.stretchesCompleted?.length || 0} items`);
       } else {
-        console.log(`📅 ${day} (${dayDateStr}): No progress record found`);
-        // Log all available dates for debugging
-        if (weeklyProgress.length > 0) {
-          const availableDates = weeklyProgress.map(p => new Date(p.date).toISOString().split('T')[0]);
-          console.log(`   - Available dates in weeklyProgress:`, availableDates);
-        }
+        console.log(`📅 ${day} (${dayDate.toISOString().split('T')[0]}): No progress record found`);
       }
       
       // Sum ALL Walking and Running habits (not just the first one)
@@ -693,16 +752,22 @@ async function updateStreak(userId) {
       streak = await Streak.create({ userId });
     }
 
+    // Use UTC to avoid timezone issues
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayUTC = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    todayUTC.setUTCHours(0, 0, 0, 0);
 
     const lastActivityDate = streak.lastActivityDate
       ? new Date(streak.lastActivityDate)
       : null;
-    lastActivityDate?.setHours(0, 0, 0, 0);
+    let lastActivityDateUTC = null;
+    if (lastActivityDate) {
+      lastActivityDateUTC = new Date(Date.UTC(lastActivityDate.getUTCFullYear(), lastActivityDate.getUTCMonth(), lastActivityDate.getUTCDate()));
+      lastActivityDateUTC.setUTCHours(0, 0, 0, 0);
+    }
 
-    const todayTime = today.getTime();
-    const lastActivityTime = lastActivityDate?.getTime();
+    const todayTime = todayUTC.getTime();
+    const lastActivityTime = lastActivityDateUTC?.getTime();
     const oneDayMs = 24 * 60 * 60 * 1000;
 
     // Check if this is today's activity
@@ -720,7 +785,7 @@ async function updateStreak(userId) {
         streak.longestStreak = streak.currentStreak;
       }
 
-      streak.lastActivityDate = today;
+      streak.lastActivityDate = todayUTC;
     }
 
     streak.totalWorkoutsCompleted += 1;
