@@ -603,16 +603,21 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
       dayDate.setDate(weekStart.getDate() + index);
       dayDate.setHours(0, 0, 0, 0);
       
-      const dayProgress = weeklyProgress.find(p => 
-        p.date.getTime() === dayDate.getTime()
-      );
+      // Find progress for this specific day - compare dates properly
+      const dayProgress = weeklyProgress.find(p => {
+        const pDate = new Date(p.date);
+        pDate.setHours(0, 0, 0, 0);
+        return pDate.getTime() === dayDate.getTime();
+      });
       
+      // Sum ALL Walking and Running habits (not just the first one)
       let dayDistance = 0;
-      if (dayProgress?.habitsCompleted) {
-        const walking = dayProgress.habitsCompleted.find(h => h.title?.includes('Walking'));
-        const running = dayProgress.habitsCompleted.find(h => h.title?.includes('Running'));
-        if (walking?.actual) dayDistance += walking.actual;
-        if (running?.actual) dayDistance += running.actual;
+      if (dayProgress?.habitsCompleted && Array.isArray(dayProgress.habitsCompleted)) {
+        dayProgress.habitsCompleted.forEach(habit => {
+          if ((habit.title?.includes('Walking') || habit.title?.includes('Running')) && habit.actual) {
+            dayDistance += Number(habit.actual) || 0;
+          }
+        });
       }
       
       weeklyData[day] = {
@@ -621,6 +626,7 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
         minutes: dayProgress?.minutesExercised || 0,
         calories: dayProgress?.caloriesBurned || 0,
         km: dayDistance,
+        streak: 0, // Weekly data doesn't track streak per day
       };
     });
 
