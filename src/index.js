@@ -410,19 +410,46 @@ app.post('/api/progress/habit', verifyToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid distance value for Walking/Running habit' });
     }
     
-    console.log('Saving habit data:', habitData);
+    console.log('Saving habit data (FULL OBJECT):', JSON.stringify(habitData, null, 2));
+    console.log('Habit data keys:', Object.keys(habitData));
+    console.log('Habit data actual value:', habitData.actual, 'type:', typeof habitData.actual, 'isNaN:', isNaN(habitData.actual));
+
+    // Ensure actual is explicitly set as a number (not undefined)
+    const habitToSave = {
+      habitId: String(habitId),
+      title: String(title),
+      timestamp: new Date(),
+    };
+    
+    // Explicitly set actual if it's a valid number
+    if (actualValue !== undefined && actualValue !== null && !isNaN(actualValue) && isFinite(actualValue)) {
+      habitToSave.actual = Number(actualValue);
+    }
+    
+    console.log('Habit to save (final):', JSON.stringify(habitToSave, null, 2));
 
     const progress = await Progress.findOneAndUpdate(
       { userId: req.userId, date: today },
       {
         $push: {
-          habitsCompleted: habitData,
+          habitsCompleted: habitToSave,
         },
       },
       { new: true, upsert: true }
     );
 
-    console.log('Saved progress habitsCompleted:', progress.habitsCompleted);
+    console.log('Saved progress habitsCompleted:', JSON.stringify(progress.habitsCompleted, null, 2));
+    console.log('Verifying actual values in saved habits:');
+    if (progress.habitsCompleted && Array.isArray(progress.habitsCompleted)) {
+      progress.habitsCompleted.forEach((habit, index) => {
+        console.log(`  Habit ${index}:`, {
+          title: habit.title,
+          actual: habit.actual,
+          actualType: typeof habit.actual,
+          hasActual: 'actual' in habit
+        });
+      });
+    }
 
     // Update streak
     await updateStreak(req.userId);
