@@ -526,7 +526,7 @@ app.post('/api/progress/stretch', verifyToken, async (req, res) => {
 // Record completed warmup
 app.post('/api/progress/warmup', verifyToken, async (req, res) => {
   try {
-    const { warmupId, title, duration } = req.body;
+    const { warmupId, title, duration, caloriesBurned } = req.body;
     if (!warmupId || !title || !duration) {
       return res.status(400).json({ error: 'Warmup details are required' });
     }
@@ -542,10 +542,12 @@ app.post('/api/progress/warmup', verifyToken, async (req, res) => {
             warmupId,
             title,
             duration,
+            caloriesBurned: caloriesBurned || 0,
           },
         },
         $inc: {
           minutesExercised: duration,
+          caloriesBurned: caloriesBurned || 0,
         },
       },
       { new: true, upsert: true }
