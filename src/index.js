@@ -610,6 +610,19 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
         return pDate.getTime() === dayDate.getTime();
       });
       
+      // DEBUG: Log what we found for this day
+      if (dayProgress) {
+        console.log(`📅 ${day} (${dayDate.toISOString().split('T')[0]}): Found progress record`);
+        console.log(`   - workoutsCompleted: ${dayProgress.workoutsCompleted?.length || 0} items`);
+        if (dayProgress.workoutsCompleted && dayProgress.workoutsCompleted.length > 0) {
+          console.log(`   - Workout details:`, dayProgress.workoutsCompleted.map(w => ({ title: w.title, workoutId: w.workoutId })));
+        }
+        console.log(`   - warmupsCompleted: ${dayProgress.warmupsCompleted?.length || 0} items`);
+        console.log(`   - stretchesCompleted: ${dayProgress.stretchesCompleted?.length || 0} items`);
+      } else {
+        console.log(`📅 ${day} (${dayDate.toISOString().split('T')[0]}): No progress record found`);
+      }
+      
       // Sum ALL Walking and Running habits (not just the first one)
       let dayDistance = 0;
       if (dayProgress?.habitsCompleted && Array.isArray(dayProgress.habitsCompleted)) {
@@ -620,8 +633,11 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
         });
       }
       
+      // IMPORTANT: Only count workoutsCompleted, NOT warmups or stretches
+      const workoutCount = dayProgress?.workoutsCompleted?.length || 0;
+      
       weeklyData[day] = {
-        workouts: dayProgress?.workoutsCompleted?.length || 0,
+        workouts: workoutCount,
         habits: dayProgress?.habitsCompleted?.length || 0,
         minutes: dayProgress?.minutesExercised || 0,
         calories: dayProgress?.caloriesBurned || 0,
