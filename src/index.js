@@ -370,6 +370,9 @@ app.post('/api/progress/workout', verifyToken, async (req, res) => {
       return res.json(existingProgressYesterday);
     }
 
+    // Ensure caloriesBurned is a number
+    const caloriesValue = Number(caloriesBurned) || 0;
+
     const progress = await Progress.findOneAndUpdate(
       { userId: req.userId, date: today },
       {
@@ -378,12 +381,12 @@ app.post('/api/progress/workout', verifyToken, async (req, res) => {
             workoutId,
             title,
             duration,
-            caloriesBurned: caloriesBurned || 0,
+            caloriesBurned: caloriesValue,
           },
         },
         $inc: {
           minutesExercised: duration,
-          caloriesBurned: caloriesBurned || 0,
+          caloriesBurned: caloriesValue,
         },
       },
       { new: true, upsert: true }
@@ -644,6 +647,9 @@ app.post('/api/progress/warmup', verifyToken, async (req, res) => {
       return res.json(existingProgressYesterday);
     }
 
+    // Ensure caloriesBurned is a number
+    const caloriesValue = Number(caloriesBurned) || 0;
+
     const progress = await Progress.findOneAndUpdate(
       { userId: req.userId, date: today },
       {
@@ -652,12 +658,12 @@ app.post('/api/progress/warmup', verifyToken, async (req, res) => {
             warmupId,
             title,
             duration,
-            caloriesBurned: caloriesBurned || 0,
+            caloriesBurned: caloriesValue,
           },
         },
         $inc: {
           minutesExercised: duration,
-          caloriesBurned: caloriesBurned || 0,
+          caloriesBurned: caloriesValue,
         },
       },
       { new: true, upsert: true }
@@ -676,9 +682,20 @@ app.post('/api/progress/warmup', verifyToken, async (req, res) => {
 // Get stats (summary)
 app.get('/api/progress/stats', verifyToken, async (req, res) => {
   try {
-    // Use local date to match user's timezone - create date at midnight local time
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Get date from query parameter or use today's date
+    // Accept date in YYYY-MM-DD format from client, or use server's current date
+    let today;
+    const dateParam = req.query.date;
+    
+    if (dateParam && typeof dateParam === 'string') {
+      // Parse YYYY-MM-DD format from client and create UTC date to match stored dates
+      const [year, month, day] = dateParam.split('-').map(Number);
+      today = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+    } else {
+      // Use current date in UTC to match how dates are stored
+      const now = new Date();
+      today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    }
 
     const todayProgress = await Progress.findOne({
       userId: req.userId,
@@ -697,16 +714,16 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
       });
     }
 
-    // Get weekly data (last 7 days) - use local time
+    // Get weekly data (last 7 days) - use UTC to match stored dates
     const weekStart = new Date(today);
-    const dayOfWeek = today.getDay();
+    const dayOfWeek = today.getUTCDay();
     const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    weekStart.setDate(today.getDate() - daysToMonday);
-    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setUTCDate(today.getUTCDate() - daysToMonday);
+    weekStart.setUTCHours(0, 0, 0, 0);
     
     const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-    weekEnd.setHours(23, 59, 59, 999);
+    weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+    weekEnd.setUTCHours(23, 59, 59, 999);
     
     const weeklyProgress = await Progress.find({
       userId: req.userId,
@@ -718,16 +735,17 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
     
     days.forEach((day, index) => {
       const dayDate = new Date(weekStart);
-      dayDate.setDate(weekStart.getDate() + index);
-      dayDate.setHours(0, 0, 0, 0);
+      dayDate.setUTCDate(weekStart.getUTCDate() + index);
+      dayDate.setUTCHours(0, 0, 0, 0);
       
-      // Find progress for this specific day - compare dates properly using local time
+      // Find progress for this specific day - compare dates properly using UTC
       const dayProgress = weeklyProgress.find(p => {
         if (!p.date) return false;
         const pDate = new Date(p.date);
-        pDate.setHours(0, 0, 0, 0);
+        // Normalize to UTC for comparison
+        const pDateUTC = new Date(Date.UTC(pDate.getUTCFullYear(), pDate.getUTCMonth(), pDate.getUTCDate(), 0, 0, 0, 0));
         // Compare timestamps
-        return pDate.getTime() === dayDate.getTime();
+        return pDateUTC.getTime() === dayDate.getTime();
       });
       
       // DEBUG: Log what we found for this day
