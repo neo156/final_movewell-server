@@ -395,39 +395,32 @@ app.post('/api/progress/habit', verifyToken, async (req, res) => {
       }
     }
 
-    const habitData = {
-      habitId: String(habitId),
-      title: String(title),
-      timestamp: new Date(),
-    };
-    
-    // Always add actual if provided (required for Walking/Running)
-    if (actualValue !== undefined && actualValue !== null && !isNaN(actualValue) && isFinite(actualValue)) {
-      habitData.actual = Number(actualValue);
-      console.log('Adding actual value:', habitData.actual, 'type:', typeof habitData.actual);
-    } else if (title.includes('Walking') || title.includes('Running')) {
-      console.error('Walking/Running habit has invalid actual value:', { actual, actualValue });
-      return res.status(400).json({ error: 'Invalid distance value for Walking/Running habit' });
-    }
-    
-    console.log('Saving habit data (FULL OBJECT):', JSON.stringify(habitData, null, 2));
-    console.log('Habit data keys:', Object.keys(habitData));
-    console.log('Habit data actual value:', habitData.actual, 'type:', typeof habitData.actual, 'isNaN:', isNaN(habitData.actual));
-
-    // Ensure actual is explicitly set as a number (not undefined)
+    // Build habit object - MUST include actual for Walking/Running
+    // For Walking/Running, actual is REQUIRED and was already validated above
     const habitToSave = {
       habitId: String(habitId),
       title: String(title),
       timestamp: new Date(),
     };
     
-    // Explicitly set actual if it's a valid number
-    if (actualValue !== undefined && actualValue !== null && !isNaN(actualValue) && isFinite(actualValue)) {
+    // FORCE include actual for Walking/Running (already validated above)
+    if (title.includes('Walking') || title.includes('Running')) {
+      // actualValue was already validated, so it MUST be a valid number here
       habitToSave.actual = Number(actualValue);
+      console.log('✓ Walking/Running - FORCED actual value:', habitToSave.actual, 'type:', typeof habitToSave.actual);
+    } else if (actualValue !== undefined && actualValue !== null && !isNaN(actualValue) && isFinite(actualValue)) {
+      // For other habits, include actual if provided
+      habitToSave.actual = Number(actualValue);
+      console.log('✓ Other habit - Added actual value:', habitToSave.actual);
     }
     
-    console.log('Habit to save (final):', JSON.stringify(habitToSave, null, 2));
+    console.log('📝 FINAL habit object BEFORE database save:');
+    console.log(JSON.stringify(habitToSave, null, 2));
+    console.log('📝 Object keys:', Object.keys(habitToSave));
+    console.log('📝 actual field exists?', 'actual' in habitToSave);
+    console.log('📝 actual value:', habitToSave.actual, 'type:', typeof habitToSave.actual);
 
+    // Use $push to add the habit with actual value
     const progress = await Progress.findOneAndUpdate(
       { userId: req.userId, date: today },
       {
@@ -435,26 +428,40 @@ app.post('/api/progress/habit', verifyToken, async (req, res) => {
           habitsCompleted: habitToSave,
         },
       },
-      { new: true, upsert: true }
+      { new: true, upsert: true, runValidators: false }
     );
 
-    console.log('Saved progress habitsCompleted:', JSON.stringify(progress.habitsCompleted, null, 2));
-    console.log('Verifying actual values in saved habits:');
+    console.log('💾 Database save completed');
+    console.log('💾 Saved progress habitsCompleted (RAW):', JSON.stringify(progress.habitsCompleted, null, 2));
+    console.log('💾 Verifying actual values in saved habits:');
     if (progress.habitsCompleted && Array.isArray(progress.habitsCompleted)) {
       progress.habitsCompleted.forEach((habit, index) => {
-        console.log(`  Habit ${index}:`, {
-          title: habit.title,
-          actual: habit.actual,
-          actualType: typeof habit.actual,
-          hasActual: 'actual' in habit
+        const habitObj = habit.toObject ? habit.toObject() : habit;
+        console.log(`  💾 Habit ${index} (${habitObj.title}):`, {
+          habitId: habitObj.habitId,
+          title: habitObj.title,
+          actual: habitObj.actual,
+          actualType: typeof habitObj.actual,
+          hasActual: 'actual' in habitObj,
+          allKeys: Object.keys(habitObj)
         });
+      });
+    }
+    
+    // Double-check by querying the database directly
+    const verifyProgress = await Progress.findOne({ userId: req.userId, date: today });
+    if (verifyProgress && verifyProgress.habitsCompleted) {
+      console.log('🔍 VERIFICATION - Direct database query:');
+      verifyProgress.habitsCompleted.forEach((habit, index) => {
+        const habitObj = habit.toObject ? habit.toObject() : habit;
+        console.log(`  🔍 Habit ${index}:`, JSON.stringify(habitObj, null, 2));
       });
     }
 
     // Update streak
     await updateStreak(req.userId);
 
-    res.json({ success: true, habit: habitData, progress });
+    res.json({ success: true, habit: habitToSave, progress });
   } catch (err) {
     console.error('Record habit error:', err);
     res.status(500).json({ error: 'Failed to record habit' });
