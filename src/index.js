@@ -526,7 +526,7 @@ app.post('/api/progress/habit', verifyToken, async (req, res) => {
 // Record completed stretch
 app.post('/api/progress/stretch', verifyToken, async (req, res) => {
   try {
-    const { stretchId, title, duration, date } = req.body;
+    const { stretchId, title, duration, caloriesBurned, date } = req.body;
     if (!stretchId || !title || !duration) {
       return res.status(400).json({ error: 'Stretch details are required' });
     }
@@ -577,10 +577,12 @@ app.post('/api/progress/stretch', verifyToken, async (req, res) => {
             stretchId,
             title,
             duration,
+            caloriesBurned: caloriesBurned || 0,
           },
         },
         $inc: {
           minutesExercised: duration,
+          caloriesBurned: caloriesBurned || 0,
         },
       },
       { new: true, upsert: true }
