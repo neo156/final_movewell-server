@@ -605,16 +605,21 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
       dayDate.setDate(weekStart.getDate() + index);
       dayDate.setHours(0, 0, 0, 0);
       
-      // Find progress for this specific day - compare dates properly
+      // Normalize dayDate to UTC for comparison
+      const dayDateStr = dayDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Find progress for this specific day - compare dates properly using date strings
       const dayProgress = weeklyProgress.find(p => {
         const pDate = new Date(p.date);
-        pDate.setHours(0, 0, 0, 0);
-        return pDate.getTime() === dayDate.getTime();
+        // Normalize to UTC date string for reliable comparison
+        const pDateStr = pDate.toISOString().split('T')[0]; // YYYY-MM-DD
+        return pDateStr === dayDateStr;
       });
       
       // DEBUG: Log what we found for this day
       if (dayProgress) {
-        console.log(`📅 ${day} (${dayDate.toISOString().split('T')[0]}): Found progress record`);
+        const progressDateStr = new Date(dayProgress.date).toISOString().split('T')[0];
+        console.log(`📅 ${day} (${dayDateStr}): Found progress record (stored date: ${progressDateStr})`);
         console.log(`   - workoutsCompleted: ${dayProgress.workoutsCompleted?.length || 0} items`);
         if (dayProgress.workoutsCompleted && dayProgress.workoutsCompleted.length > 0) {
           console.log(`   - Workout details:`, dayProgress.workoutsCompleted.map(w => ({ title: w.title, workoutId: w.workoutId })));
@@ -622,7 +627,12 @@ app.get('/api/progress/stats', verifyToken, async (req, res) => {
         console.log(`   - warmupsCompleted: ${dayProgress.warmupsCompleted?.length || 0} items`);
         console.log(`   - stretchesCompleted: ${dayProgress.stretchesCompleted?.length || 0} items`);
       } else {
-        console.log(`📅 ${day} (${dayDate.toISOString().split('T')[0]}): No progress record found`);
+        console.log(`📅 ${day} (${dayDateStr}): No progress record found`);
+        // Log all available dates for debugging
+        if (weeklyProgress.length > 0) {
+          const availableDates = weeklyProgress.map(p => new Date(p.date).toISOString().split('T')[0]);
+          console.log(`   - Available dates in weeklyProgress:`, availableDates);
+        }
       }
       
       // Sum ALL Walking and Running habits (not just the first one)
